@@ -6,6 +6,11 @@ import {
   Clock, CheckCircle2, Trash2, Edit3, FileText, ArrowUpRight
 } from 'lucide-react';
 
+const getTodayDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
 export default function TaskList() {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -30,6 +35,12 @@ export default function TaskList() {
   };
 
   const [formData, setFormData] = useState(emptyForm);
+  const today = getTodayDate();
+  // Preserve historical dates when editing an existing task without rescheduling it.
+  const keepingOriginalStartDate = editingTask && formData.startDate === editingTask.startDate;
+  const minimumStartDate = keepingOriginalStartDate && formData.startDate < today
+    ? formData.startDate
+    : today;
 
   useEffect(() => {
     projectApi.getAll().then(res => setProjects(res || [])).catch(console.error);
@@ -56,6 +67,10 @@ export default function TaskList() {
     }
     if (!formData.projectId) {
       setFormError('Please select a linked project.');
+      return;
+    }
+    if (formData.startDate < getTodayDate() && !keepingOriginalStartDate) {
+      setFormError('Start date must be today or a future date.');
       return;
     }
     if (formData.startDate && formData.dueDate && formData.startDate > formData.dueDate) {
@@ -325,6 +340,7 @@ export default function TaskList() {
                       className="form-input" 
                       required 
                       value={formData.startDate}
+                      min={minimumStartDate}
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                     />
                   </div>
