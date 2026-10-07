@@ -65,6 +65,16 @@ public class DataSeeder implements CommandLineRunner {
         if (userRepository.count() == 0) {
             seedUsers();
         }
+        // Older demonstration databases had demo users without passwords.
+        // Initialize only those known demo accounts when demonstration mode is explicitly enabled.
+        for (String username : List.of("admin_sys", "pm_kamal", "sup_perera", "client_road_auth", "pm_sarath")) {
+            userRepository.findByUsernameAndIsDeletedFalse(username).ifPresent(user -> {
+                if (user.getPassword() == null || user.getPassword().isBlank()) {
+                    user.setPassword(passwordEncoder.encode("DemoPass123!"));
+                    userRepository.save(user);
+                }
+            });
+        }
     }
 
     private void seedProjects() {

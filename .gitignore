@@ -1,0 +1,5 @@
+/.review-quality-merge/
+/.local-backups/
+/.idea/
+**/.DS_Store
+*.log

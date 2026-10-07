@@ -12,6 +12,29 @@ The application uses session authentication. Roles and permissions are checked o
 
 ## Run the demonstration on Windows
 
+From the repository root, the portable demonstration needs no MySQL configuration:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1 -Demo
+```
+
+In another terminal:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-frontend.ps1
+```
+
+Open http://localhost:5173 and use the demo accounts below. The `-Demo` option uses
+a persistent H2 database in the ignored `ConstructionManagemnet/data` folder.
+Omit `-Demo` to use MySQL. Both modes use the same screens, modules and API.
+The first Maven/npm run downloads dependencies, so allow it to finish before the viva.
+
+For MySQL, use the following environment settings or create an ignored
+`ConstructionManagemnet/src/main/resources/application-local.properties` containing
+your local `spring.datasource.url`, `spring.datasource.username`,
+`spring.datasource.password` and `app.seed-demo=true`. This local file is optional
+and is never included in GitHub commits.
+
 In PowerShell, from the repository root:
 
 ```powershell
@@ -45,8 +68,9 @@ New demo accounts use the password `DemoPass123!`:
 
 `pm_sarath` is deliberately inactive. Demo data is created only when `SEED_DEMO=true`
 and the relevant database table is empty. This does not reset existing accounts.
-Older databases containing blank or plaintext passwords need an administrator to
-reset those passwords; use a fresh demonstration database for these new hashed accounts.
+With demonstration mode explicitly enabled, known demo accounts without passwords
+receive the demo password, without replacing existing passwords or deleting records.
+Other older accounts need an administrator to reset their passwords.
 
 For a new database without demo data, leave `SEED_DEMO` unset and set
 `BOOTSTRAP_ADMIN_PASSWORD` to your chosen password (8 to 72 characters).
