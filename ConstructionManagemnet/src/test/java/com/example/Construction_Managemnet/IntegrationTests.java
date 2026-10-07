@@ -119,6 +119,13 @@ class IntegrationTests {
     }
 
     @Test
+    void developmentFrontendOriginCanRequestSessionToken() throws Exception {
+        mvc.perform(get("/api/auth/csrf").header("Origin", "http://127.0.0.1:5174"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://127.0.0.1:5174"));
+    }
+
+    @Test
     void csrfAndRolesAreEnforced() throws Exception {
         MockHttpSession session = login("pm");
         mvc.perform(get("/api/users").session(session)).andExpect(status().isForbidden());
