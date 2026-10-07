@@ -691,6 +691,17 @@ tr:hover td {
 .topbar-nav { flex-wrap: wrap; }
 .topbar-link { cursor: pointer; }
 button:disabled { opacity: 0.6; cursor: wait; }
+@media print {
+  body { background: white !important; color: black !important; }
+  body * { visibility: hidden; }
+  .modal-overlay, .modal-overlay * { visibility: visible; }
+  .modal-overlay { position: absolute !important; inset: 0 !important; display: block !important; background: white !important; padding: 0 !important; }
+  .modal-card { max-width: none !important; width: 100% !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; border: none !important; background: white !important; color: black !important; }
+  .modal-body { max-height: none !important; overflow: visible !important; }
+  .modal-overlay button, .modal-footer { display: none !important; }
+  .modal-overlay table { width: 100%; }
+  .modal-overlay tr { break-inside: avoid; }
+}
 @media (max-width: 768px) {
   .login-card { grid-template-columns: 1fr !important; }
   .login-panel { padding: 28px 24px !important; }

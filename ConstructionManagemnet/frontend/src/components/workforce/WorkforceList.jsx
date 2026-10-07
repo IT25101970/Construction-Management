@@ -471,8 +471,8 @@ export default function WorkforceList() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>Close</button>
-              <button className="btn-gsi-gold" style={{ padding: '8px 20px', borderRadius: 4, fontSize: '0.8rem' }} onClick={() => alert('PDF Payroll Report generated!')}>
-                Export PDF Report
+              <button className="btn-gsi-gold" style={{ padding: '8px 20px', borderRadius: 4, fontSize: '0.8rem' }} onClick={() => window.print()}>
+                Print / Save PDF
               </button>
             </div>
           </div>

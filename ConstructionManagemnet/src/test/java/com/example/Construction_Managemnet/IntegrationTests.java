@@ -51,6 +51,8 @@ class IntegrationTests {
     @Autowired FinanceService finance;
     @Autowired WorkforceService workforce;
     @Autowired InspectionService inspections;
+    @Autowired com.example.Construction_Managemnet.task.service.TaskService tasks;
+    @Autowired com.example.Construction_Managemnet.task.repository.TaskRepository taskRepository;
     MockMvc mvc;
 
     @BeforeEach
@@ -259,5 +261,199 @@ class IntegrationTests {
         projects.deleteMilestone(milestone.getId());
         assertEquals(0, projects.getProjectById(project.getId()).getProgressPercentage());
         assertEquals(ProjectStatus.ONGOING, projects.getProjectById(project.getId()).getStatus());
+    }
+
+    private String taskBody(Long projectId, LocalDate start, LocalDate due, int progress) {
+        return """
+                {"title":"QA task","projectId":%d,"assignedTo":"Supervisor",
+                 "startDate":"%s","dueDate":"%s","progressPercentage":%d}
+                """.formatted(projectId, start, due, progress);
+    }
+
+    @Test
+    void taskApiSupportsCreateSearchCompleteAndDelete() throws Exception {
+        Long projectId = project("Other Organization").getId();
+        MockHttpSession session = login("supervisor");
+        String body = taskBody(projectId, LocalDate.now(), LocalDate.now().plusDays(2), 0);
+        var created = mvc.perform(post("/api/tasks").session(session).with(csrf())
+                .contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        mvc.perform(get("/api/tasks").param("keyword", "QA task").param("projectId", projectId.toString())
+                .session(session)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(put("/api/tasks/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(taskBody(projectId, LocalDate.now(), LocalDate.now().plusDays(2), 100)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DONE"));
+        mvc.perform(get("/api/tasks/reports/weekly").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.completedTasks").value(1));
+        mvc.perform(delete("/api/tasks/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/tasks/" + id).session(session)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void taskApiRejectsReversedDatesOnCreateAndUpdate() throws Exception {
+        Long projectId = project("Other Organization").getId();
+        MockHttpSession session = login("pm");
+        String invalid = taskBody(projectId, LocalDate.now(), LocalDate.now().minusDays(1), 0);
+        mvc.perform(post("/api/tasks").session(session).with(csrf()).contentType("application/json")
+                .content(invalid)).andExpect(status().isBadRequest());
+        var created = mvc.perform(post("/api/tasks").session(session).with(csrf()).contentType("application/json")
+                .content(taskBody(projectId, LocalDate.now(), LocalDate.now(), 0)))
+                .andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        mvc.perform(put("/api/tasks/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(invalid)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void weeklyReportRecognizesTasksThatBecomeOverdueWithoutOpeningTaskList() {
+        var task = new com.example.Construction_Managemnet.task.model.TaskItem();
+        task.setTitle("Previously pending task"); task.setProject(project("Other Organization"));
+        task.setAssignedTo("Supervisor"); task.setStartDate(LocalDate.now().minusDays(3));
+        task.setDueDate(LocalDate.now().minusDays(1));
+        task.setStatus(com.example.Construction_Managemnet.task.model.TaskStatus.TODO);
+        taskRepository.saveAndFlush(task);
+        assertEquals(1L, tasks.getWeeklyTaskReport(null).get("overdueTasksCount"));
+        assertEquals(com.example.Construction_Managemnet.task.model.TaskStatus.DELAYED, tasks.getTaskById(task.getId()).getStatus());
+    }
+
+    @Test
+    void logoutInvalidatesAuthenticatedSession() throws Exception {
+        MockHttpSession session = login("client");
+        mvc.perform(post("/api/auth/logout").session(session).with(csrf())).andExpect(status().isOk());
+        assertTrue(session.isInvalid());
+        mvc.perform(get("/api/auth/session")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void roleReadAccessMatrixProtectsAdminAndClientEndpoints() throws Exception {
+        for (String name : new String[]{"admin", "pm", "supervisor", "client"}) {
+            MockHttpSession session = login(name);
+            for (String endpoint : new String[]{"/api/projects", "/api/tasks", "/api/inspections",
+                    "/api/materials", "/api/workers", "/api/expenses", "/api/users"}) {
+                boolean allowed = name.equals("admin") ||
+                        (!endpoint.equals("/api/users") && (!name.equals("client") || endpoint.equals("/api/projects")));
+                mvc.perform(get(endpoint).session(session))
+                        .andExpect(allowed ? status().isOk() : status().isForbidden());
+            }
+        }
+    }
+
+    @Test
+    void projectApiRejectsInvalidDatesAndDeletedProjectsCannotReceiveTasks() throws Exception {
+        MockHttpSession session = login("pm");
+        String body = """
+                {"name":"QA project","client":"Other Organization","location":"Colombo",
+                 "startDate":"2026-10-10","endDate":"2026-10-09","estimatedBudget":100}
+                """;
+        mvc.perform(post("/api/projects").session(session).with(csrf()).contentType("application/json")
+                .content(body)).andExpect(status().isBadRequest());
+        Long id = project("Other Organization").getId();
+        mvc.perform(delete("/api/projects/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/projects/" + id).session(session)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/tasks").session(session).with(csrf()).contentType("application/json")
+                .content(taskBody(id, LocalDate.now(), LocalDate.now(), 0))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void expenseApiCreateEditDeleteRecalculatesBudget() throws Exception {
+        Long projectId = project("Other Organization").getId();
+        MockHttpSession session = login("pm");
+        String body = """
+                {"voucherNo":"QA-001","projectId":%d,"category":"Materials",
+                 "status":"APPROVED","amount":25,"date":"%s"}
+                """.formatted(projectId, LocalDate.now());
+        var created = mvc.perform(post("/api/expenses").session(session).with(csrf())
+                .contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        mvc.perform(put("/api/expenses/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("\"amount\":25", "\"amount\":40"))).andExpect(status().isOk());
+        mvc.perform(get("/api/expenses/budgets").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].spentAmount").value(40));
+        mvc.perform(delete("/api/expenses/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/expenses/" + id).session(session)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/expenses/budgets").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].spentAmount").value(0));
+    }
+
+    @Test
+    void materialApiRecordsStockMovementAndPreventsCatalogStockBypass() throws Exception {
+        MockHttpSession session = login("supervisor");
+        String body = """
+                {"name":"QA cement","category":"Cement","unit":"Bags","currentStock":10,"reorderLevel":5}
+                """;
+        var created = mvc.perform(post("/api/materials").session(session).with(csrf()).contentType("application/json")
+                .content(body)).andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        mvc.perform(post("/api/materials/" + id + "/adjust").session(session).with(csrf()).contentType("application/json")
+                .content("{\"quantity\":6,\"transactionType\":\"STOCK_OUT\",\"siteName\":\"Colombo\",\"issuedTo\":\"Supervisor\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.currentStock").value(4));
+        mvc.perform(put("/api/materials/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("QA cement", "QA renamed"))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/materials/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("QA cement", "QA renamed").replace("\"currentStock\":10", "\"currentStock\":4"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStock").value(4));
+        mvc.perform(get("/api/materials/logs").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].quantity").value(6));
+        mvc.perform(delete("/api/materials/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/materials/" + id).session(session)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void workerApiAttendancePersistsAndDuplicateAndFutureDatesAreRejected() throws Exception {
+        MockHttpSession session = login("supervisor");
+        String body = "{\"fullName\":\"QA Worker\",\"nic\":\"123456789V\",\"tradeCategory\":\"Mason\",\"dailyWageRate\":100}";
+        var created = mvc.perform(post("/api/workers").session(session).with(csrf()).contentType("application/json")
+                .content(body)).andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        String attendance = "{\"workerId\":%s,\"date\":\"%s\",\"status\":\"PRESENT\"}".formatted(id, LocalDate.now());
+        mvc.perform(post("/api/workers/attendance").session(session).with(csrf()).contentType("application/json")
+                .content(attendance)).andExpect(status().isCreated()).andExpect(jsonPath("$.calculatedWage").value(100));
+        mvc.perform(post("/api/workers/attendance").session(session).with(csrf()).contentType("application/json")
+                .content(attendance)).andExpect(status().isConflict());
+        mvc.perform(post("/api/workers/attendance").session(session).with(csrf()).contentType("application/json")
+                .content(attendance.replace(LocalDate.now().toString(), LocalDate.now().plusDays(1).toString())))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/workers/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("QA Worker", "QA Updated Worker"))).andExpect(status().isOk());
+        mvc.perform(get("/api/workers/" + id).session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("QA Updated Worker"));
+        mvc.perform(delete("/api/workers/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/workers/" + id).session(session)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void adminApiCreatesUpdatesDisablesAndDeletesUserWithoutExposingPassword() throws Exception {
+        MockHttpSession session = login("admin");
+        String body = """
+                {"username":"qa_user","fullName":"QA User","email":"qa@example.com","role":"PM","password":"TestPass123!"}
+                """;
+        var created = mvc.perform(post("/api/users").session(session).with(csrf()).contentType("application/json")
+                .content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.password").doesNotExist()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        login("qa_user");
+        mvc.perform(put("/api/users/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("QA User", "Updated QA User"))).andExpect(status().isOk());
+        mvc.perform(post("/api/users/" + id + "/toggle-status").session(session).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("INACTIVE"));
+        mvc.perform(delete("/api/users/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/users/" + id).session(session)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void inspectionApiCreatesUpdatesFiltersAndDeletes() throws Exception {
+        Long projectId = project("Other Organization").getId();
+        MockHttpSession session = login("supervisor");
+        String body = """
+                {"projectId":%d,"stage":"FOUNDATION","inspectorName":"QA Inspector","inspectionDate":"%s","status":"PENDING"}
+                """.formatted(projectId, LocalDate.now());
+        var created = mvc.perform(post("/api/inspections").session(session).with(csrf()).contentType("application/json")
+                .content(body)).andExpect(status().isCreated()).andReturn();
+        Number id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        mvc.perform(put("/api/inspections/" + id).session(session).with(csrf()).contentType("application/json")
+                .content(body.replace("PENDING", "PASSED"))).andExpect(status().isOk());
+        mvc.perform(get("/api/inspections").session(session).param("projectId", projectId.toString()).param("status", "PASSED"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(delete("/api/inspections/" + id).session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/inspections/" + id).session(session)).andExpect(status().isNotFound());
     }
 }

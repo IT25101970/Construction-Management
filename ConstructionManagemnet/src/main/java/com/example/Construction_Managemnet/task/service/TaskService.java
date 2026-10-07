@@ -69,11 +69,12 @@ public class TaskService {
         taskRepository.save(task);
     }
 
-    @Transactional(readOnly = true)
     public Map<String, Object> getWeeklyTaskReport(Long projectId) {
         List<TaskItem> tasks = projectId != null
                 ? taskRepository.searchTasks(projectId, null, null, null)
                 : taskRepository.findByIsDeletedFalseOrderByDueDateAsc();
+
+        checkAndApplyOverdueStatus(tasks);
 
         long total = tasks.size();
         long completed = tasks.stream().filter(t -> t.getStatus() == TaskStatus.DONE).count();
@@ -124,6 +125,9 @@ public class TaskService {
     }
 
     private void mapDtoToEntity(TaskDto dto, TaskItem task, Project project) {
+        if (dto.getStartDate() != null && dto.getDueDate() != null && dto.getDueDate().isBefore(dto.getStartDate())) {
+            throw new IllegalArgumentException("Task due date must be on or after start date");
+        }
         task.setTitle(dto.getTitle());
         task.setDescription(dto.getDescription());
         task.setProject(project);
