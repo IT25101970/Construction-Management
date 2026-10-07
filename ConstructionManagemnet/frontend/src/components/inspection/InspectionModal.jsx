@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { X, ShieldAlert } from 'lucide-react';
 
 export default function InspectionModal({ isOpen, onClose, onSave, inspection, projects }) {
   const [formData, setFormData] = useState({

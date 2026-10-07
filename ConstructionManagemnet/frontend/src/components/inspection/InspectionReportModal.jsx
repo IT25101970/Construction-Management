@@ -1,14 +1,12 @@
 import React from 'react';
-import { X, Printer, ShieldCheck, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Printer, AlertTriangle } from 'lucide-react';
 
 export default function InspectionReportModal({ isOpen, onClose, reportData }) {
   if (!isOpen || !reportData) return null;
 
   const {
     totalInspections = 0,
-    passedCount = 0,
     failedCount = 0,
-    pendingCount = 0,
     reInspectionsScheduled = 0,
     passRatePercentage = 0,
     openDefects = [],

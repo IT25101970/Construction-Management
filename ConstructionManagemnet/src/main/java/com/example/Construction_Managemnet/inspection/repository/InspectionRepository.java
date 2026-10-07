@@ -30,4 +30,5 @@ public interface InspectionRepository extends JpaRepository<Inspection, Long> {
     long countByStatusAndIsDeletedFalse(InspectionStatus status);
 
     long countByIsDeletedFalse();
+    boolean existsByOriginalInspectionIdAndStatusAndIsDeletedFalse(Long id, InspectionStatus status);
 }

@@ -34,7 +34,7 @@ public class WorkforceController {
     }
 
     @PostMapping
-    public ResponseEntity<Worker> createWorker(@RequestBody Worker worker) {
+    public ResponseEntity<Worker> createWorker(@jakarta.validation.Valid @RequestBody Worker worker) {
         return new ResponseEntity<>(workforceService.createWorker(worker), HttpStatus.CREATED);
     }
 
@@ -44,7 +44,7 @@ public class WorkforceController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Worker> updateWorker(@PathVariable Long id, @RequestBody Worker worker) {
+    public ResponseEntity<Worker> updateWorker(@PathVariable Long id, @jakarta.validation.Valid @RequestBody Worker worker) {
         return ResponseEntity.ok(workforceService.updateWorker(id, worker));
     }
 

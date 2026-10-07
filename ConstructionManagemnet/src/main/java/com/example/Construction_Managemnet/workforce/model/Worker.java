@@ -14,15 +14,20 @@ import lombok.Setter;
 public class Worker extends BaseEntity {
 
     @Column(name = "full_name", nullable = false)
+    @jakarta.validation.constraints.NotBlank
     private String fullName;
 
     @Column(nullable = false)
+    @jakarta.validation.constraints.NotBlank
     private String nic;
 
     @Column(name = "trade_category", nullable = false)
+    @jakarta.validation.constraints.NotBlank
     private String tradeCategory; // Mason, Electrician, Plumber, Carpenter, Site Helper
 
     @Column(name = "daily_wage_rate", nullable = false)
+    @jakarta.validation.constraints.NotNull
+    @jakarta.validation.constraints.PositiveOrZero
     private Double dailyWageRate = 0.0;
 
     private String phone;
@@ -31,6 +36,7 @@ public class Worker extends BaseEntity {
     private String assignedSite;
 
     @Column(nullable = false)
+    @jakarta.validation.constraints.Pattern(regexp = "ACTIVE|ON_LEAVE|INACTIVE")
     private String status = "ACTIVE"; // ACTIVE, ON_LEAVE, INACTIVE
 
     @Column(name = "days_present_this_month", nullable = false)

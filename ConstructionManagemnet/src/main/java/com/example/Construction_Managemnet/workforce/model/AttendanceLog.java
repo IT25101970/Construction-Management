@@ -12,7 +12,7 @@ import java.time.LocalDate;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "workforce_attendance_logs")
+@Table(name = "workforce_attendance_logs", uniqueConstraints = @UniqueConstraint(columnNames = {"worker_id", "date"}))
 public class AttendanceLog extends BaseEntity {
 
     @Column(name = "worker_id", nullable = false)

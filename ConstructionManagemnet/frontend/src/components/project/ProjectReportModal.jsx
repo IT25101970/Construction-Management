@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Printer, BarChart3, TrendingUp, CheckCircle2, Clock } from 'lucide-react';
+import { X, Printer } from 'lucide-react';
 
 export default function ProjectReportModal({ isOpen, onClose, reportData }) {
   if (!isOpen || !reportData) return null;

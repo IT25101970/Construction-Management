@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { taskApi } from '../../api/taskApi';
 import { projectApi } from '../../api/projectApi';
-import { 
-  CheckSquare, Plus, Search, Filter, AlertTriangle, Calendar, 
-  Clock, CheckCircle2, Trash2, Edit3, FileText, ArrowUpRight
+import {
+  Plus, AlertTriangle, Trash2, Edit3, FileText
 } from 'lucide-react';
 
 const getTodayDate = () => {
@@ -47,7 +46,7 @@ export default function TaskList() {
     loadTasks();
   }, []);
 
-  const loadTasks = () => {
+  function loadTasks() {
     setLoading(true);
     taskApi.getAll()
       .then((data) => setTasks(data))
@@ -86,14 +85,8 @@ export default function TaskList() {
       }
       loadTasks();
     } catch (err) {
-      console.error('Failed to save task:', err);
-      // Fallback local update
-      const isOverdue = new Date(formData.dueDate) < new Date() && formData.status !== 'DONE';
-      if (editingTask) {
-        setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...formData, isOverdue } : t));
-      } else {
-        setTasks(prev => [{ id: Date.now(), ...formData, isOverdue }, ...prev]);
-      }
+      setFormError(err.message || 'Could not save task');
+      return;
     }
     setShowModal(false);
     setEditingTask(null);
@@ -106,20 +99,21 @@ export default function TaskList() {
         await taskApi.delete(id);
         loadTasks();
       } catch (err) {
-        console.error('Failed to delete task:', err);
-        setTasks(prev => prev.filter(t => t.id !== id));
+        alert(err.message);
       }
     }
   };
 
   const filteredTasks = tasks.filter(t => {
-    const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase()) ||
                           t.assignee.toLowerCase().includes(search.toLowerCase()) ||
                           t.projectName.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
     const matchesPriority = priorityFilter === 'ALL' || t.priority === priorityFilter;
     return matchesSearch && matchesStatus && matchesPriority;
   });
+
+  if (loading) return <div className="content-area" role="status">Loading records...</div>;
 
   return (
     <div style={{ padding: '32px' }}>
@@ -162,10 +156,10 @@ export default function TaskList() {
       <div className="table-card">
         <div className="table-toolbar">
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input 
-              type="text" 
-              className="search-input" 
-              placeholder="Search by task title, assignee, project..." 
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by task title, assignee, project..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -212,7 +206,7 @@ export default function TaskList() {
                   </td>
                   <td>{t.assignee || 'Unassigned'}</td>
                   <td>
-                    <span className="badge" style={{ 
+                    <span className="badge" style={{
                       background: t.priority === 'HIGH' ? 'rgba(239, 68, 68, 0.15)' : t.priority === 'MEDIUM' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
                       color: t.priority === 'HIGH' ? 'var(--danger)' : t.priority === 'MEDIUM' ? 'var(--warning)' : 'var(--success)'
                     }}>
@@ -268,10 +262,10 @@ export default function TaskList() {
                 )}
                 <div className="form-group">
                   <label className="form-label">Task Title *</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   />
@@ -280,9 +274,9 @@ export default function TaskList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Linked Project *</label>
-                    <select 
-                      className="form-select" 
-                      required 
+                    <select
+                      className="form-select"
+                      required
                       value={formData.projectId}
                       onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
                     >
@@ -294,10 +288,10 @@ export default function TaskList() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Assigned Supervisor / Worker *</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="text"
+                      className="form-input"
+                      required
                       value={formData.assignee}
                       onChange={(e) => setFormData({ ...formData, assignee: e.target.value })}
                     />
@@ -307,8 +301,8 @@ export default function TaskList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Priority Level *</label>
-                    <select 
-                      className="form-select" 
+                    <select
+                      className="form-select"
                       value={formData.priority}
                       onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
                     >
@@ -319,8 +313,8 @@ export default function TaskList() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Task Status *</label>
-                    <select 
-                      className="form-select" 
+                    <select
+                      className="form-select"
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     >
@@ -335,10 +329,10 @@ export default function TaskList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Start Date *</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="date"
+                      className="form-input"
+                      required
                       value={formData.startDate}
                       min={minimumStartDate}
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
@@ -346,10 +340,10 @@ export default function TaskList() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Due Date *</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="date"
+                      className="form-input"
+                      required
                       value={formData.dueDate}
                       onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     />
@@ -358,10 +352,10 @@ export default function TaskList() {
 
                 <div className="form-group">
                   <label className="form-label">Progress Percentage ({formData.progressPercentage}%)</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
                     value={formData.progressPercentage}
                     onChange={(e) => setFormData({ ...formData, progressPercentage: Number(e.target.value) })}
                   />
@@ -369,8 +363,8 @@ export default function TaskList() {
 
                 <div className="form-group">
                   <label className="form-label">Description & Work Notes</label>
-                  <textarea 
-                    className="form-textarea" 
+                  <textarea
+                    className="form-textarea"
                     rows="3"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}

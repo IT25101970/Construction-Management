@@ -4,8 +4,8 @@ import ProjectModal from './ProjectModal';
 import MilestoneModal from './MilestoneModal';
 import ProjectReportModal from './ProjectReportModal';
 import {
-  Plus, Search, Filter, Layers, Archive, Trash2, Edit, FileText,
-  Flag, Building2, Calendar, Wallet, CheckCircle2, Clock, AlertTriangle
+  Plus, Archive, Trash2, Edit, FileText,
+  Flag, AlertTriangle
 } from 'lucide-react';
 
 export default function ProjectList() {

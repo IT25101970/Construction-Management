@@ -30,10 +30,11 @@ public class WebConfig implements WebMvcConfigurer {
                 .addResolver(new PathResourceResolver() {
                     @Override
                     protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                        if (resourcePath.startsWith("api/")) return null;
                         Resource requestedResource = location.createRelative(resourcePath);
                         return (requestedResource.exists() && requestedResource.isReadable())
                                 ? requestedResource
-                                : location.createRelative("index.html");
+                                : resourcePath.contains(".") ? null : location.createRelative("index.html");
                     }
                 });
     }

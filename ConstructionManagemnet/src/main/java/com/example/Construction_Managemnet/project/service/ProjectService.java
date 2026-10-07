@@ -19,22 +19,24 @@ public class ProjectService {
 
     private final ProjectRepository projectRepository;
     private final MilestoneRepository milestoneRepository;
+    private final com.example.Construction_Managemnet.user.repository.UserAccountRepository userRepository;
 
     @Transactional(readOnly = true)
     public List<Project> getAllProjects() {
-        return projectRepository.findByIsDeletedFalseOrderByCreatedAtDesc();
+        return visibleProjects(projectRepository.findByIsDeletedFalseOrderByCreatedAtDesc());
     }
 
     @Transactional(readOnly = true)
     public List<Project> searchProjects(String keyword, String client, ProjectStatus status) {
         String kw = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
         String cl = (client != null && !client.trim().isEmpty()) ? client.trim() : null;
-        return projectRepository.searchProjects(kw, cl, status);
+        return visibleProjects(projectRepository.searchProjects(kw, cl, status));
     }
 
     @Transactional(readOnly = true)
     public Project getProjectById(Long id) {
         return projectRepository.findByIdAndIsDeletedFalse(id)
+                .filter(this::canReadProject)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
     }
 
@@ -125,11 +127,26 @@ public class ProjectService {
         return report;
     }
 
+    private List<Project> visibleProjects(List<Project> projects) {
+        return projects.stream().filter(this::canReadProject).toList();
+    }
+
+    private boolean canReadProject(Project project) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_CLIENT"))) return true;
+        return userRepository.findByUsernameAndIsDeletedFalse(authentication.getName())
+                .map(user -> user.getFullName().trim().equalsIgnoreCase(project.getClient().trim())).orElse(false);
+    }
+
     private void updateProjectProgressFromMilestones(Project project) {
         List<Milestone> activeMilestones = project.getMilestones().stream()
                 .filter(m -> !Boolean.TRUE.equals(m.getIsDeleted()))
                 .toList();
-        if (!activeMilestones.isEmpty()) {
+        if (activeMilestones.isEmpty()) {
+            project.setProgressPercentage(0);
+            if (project.getStatus() == ProjectStatus.COMPLETED) project.setStatus(ProjectStatus.ONGOING);
+            projectRepository.save(project);
+        } else {
             long completedCount = activeMilestones.stream()
                     .filter(m -> m.getStatus() == MilestoneStatus.COMPLETED)
                     .count();
@@ -138,11 +155,13 @@ public class ProjectService {
             if (calcPercentage == 100 && project.getStatus() == ProjectStatus.ONGOING) {
                 project.setStatus(ProjectStatus.COMPLETED);
             }
+            if (calcPercentage < 100 && project.getStatus() == ProjectStatus.COMPLETED) project.setStatus(ProjectStatus.ONGOING);
             projectRepository.save(project);
         }
     }
 
     private void mapDtoToEntity(ProjectDto dto, Project project) {
+        if (dto.getStartDate() != null && dto.getEndDate() != null && dto.getEndDate().isBefore(dto.getStartDate())) throw new IllegalArgumentException("Project end date must be on or after start date");
         project.setName(dto.getName());
         project.setClient(dto.getClient());
         project.setLocation(dto.getLocation());

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { workforceApi } from '../../api/workforceApi';
-import { 
-  Users, UserPlus, Calendar, Wallet, Search, Edit3, 
-  Trash2, AlertTriangle, FileText, CheckCircle2, Clock
+import {
+  UserPlus, Calendar, Edit3,
+  FileText
 } from 'lucide-react';
 
 export default function WorkforceList() {
@@ -11,7 +11,7 @@ export default function WorkforceList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tradeFilter, setTradeFilter] = useState('ALL');
-  
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -30,7 +30,7 @@ export default function WorkforceList() {
   });
 
   const [attendanceForm, setAttendanceForm] = useState({
-    workerId: 201,
+    workerId: '',
     date: new Date().toISOString().split('T')[0],
     siteName: 'Lotus Horizon Commercial Complex',
     status: 'PRESENT',
@@ -41,14 +41,15 @@ export default function WorkforceList() {
     loadData();
   }, []);
 
-  const loadData = () => {
+  function loadData() {
     setLoading(true);
-    Promise.all([workforceApi.getAllWorkers(), workforceApi.getAttendanceLogs()])
+    return Promise.all([workforceApi.getAllWorkers(), workforceApi.getAttendanceLogs()])
       .then(([workerData, attData]) => {
         setWorkers(workerData);
         setAttendance(attData);
+        setAttendanceForm(current => ({ ...current, workerId: workerData.some(worker => String(worker.id) === String(current.workerId)) ? current.workerId : workerData.find(worker => worker.status === 'ACTIVE')?.id || '' }));
       })
-      .catch((err) => console.error(err))
+      .catch((err) => alert(err.message))
       .finally(() => setLoading(false));
   };
 
@@ -62,18 +63,8 @@ export default function WorkforceList() {
       }
       loadData();
     } catch (err) {
-      console.error('Failed to save worker:', err);
-      if (editingWorker) {
-        setWorkers(prev => prev.map(w => w.id === editingWorker.id ? { ...w, ...workerForm } : w));
-      } else {
-        const newWorker = {
-          id: Date.now(),
-          ...workerForm,
-          daysPresentThisMonth: 0,
-          totalEarnedWage: 0.00
-        };
-        setWorkers(prev => [newWorker, ...prev]);
-      }
+      alert(err.message || "The request failed. Please try again.");
+      return;
     }
     setShowAddModal(false);
     setEditingWorker(null);
@@ -92,32 +83,12 @@ export default function WorkforceList() {
         date: attendanceForm.date,
         siteName: attendanceForm.siteName,
         status: attendanceForm.status,
-        hoursWorked: attendanceForm.status === 'PRESENT' ? 8 : 0
+        hoursWorked: attendanceForm.status === 'PRESENT' ? 8 : attendanceForm.status === 'HALF_DAY' ? 4 : 0
       });
       loadData();
     } catch (err) {
-      console.error('Failed to log attendance:', err);
-      const isPresent = attendanceForm.status === 'PRESENT';
-      const wage = isPresent ? Number(worker.dailyWageRate) : 0;
-      setWorkers(prev => prev.map(w => {
-        if (w.id === worker.id) {
-          const days = isPresent ? w.daysPresentThisMonth + 1 : w.daysPresentThisMonth;
-          return { ...w, daysPresentThisMonth: days, totalEarnedWage: days * Number(w.dailyWageRate) };
-        }
-        return w;
-      }));
-      const newLog = {
-        id: Date.now(),
-        workerId: worker.id,
-        workerName: worker.fullName,
-        trade: worker.tradeCategory,
-        date: attendanceForm.date,
-        siteName: attendanceForm.siteName,
-        status: attendanceForm.status,
-        hoursWorked: isPresent ? 8 : 0,
-        calculatedWage: wage
-      };
-      setAttendance(prev => [newLog, ...prev]);
+      alert(err.message || "The request failed. Please try again.");
+      return;
     }
     setShowAttendanceModal(false);
   };
@@ -131,21 +102,23 @@ export default function WorkforceList() {
           loadData();
         }
       } catch (err) {
-        console.error('Failed to deactivate worker:', err);
-        setWorkers(prev => prev.map(w => w.id === id ? { ...w, status: 'INACTIVE' } : w));
+        alert(err.message || "The request failed. Please try again.");
+        return;
       }
     }
   };
 
   const filteredWorkers = workers.filter(w => {
-    const matchesSearch = w.fullName.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = w.fullName.toLowerCase().includes(search.toLowerCase()) ||
                           w.nic.toLowerCase().includes(search.toLowerCase()) ||
-                          w.assignedSite.toLowerCase().includes(search.toLowerCase());
+                          (w.assignedSite || '').toLowerCase().includes(search.toLowerCase());
     const matchesTrade = tradeFilter === 'ALL' || w.tradeCategory === tradeFilter;
     return matchesSearch && matchesTrade;
   });
 
   const totalMonthlyPayroll = workers.reduce((acc, curr) => acc + (curr.totalEarnedWage || 0), 0);
+
+  if (loading) return <div className="content-area" role="status">Loading records...</div>;
 
   return (
     <div style={{ padding: '32px' }}>
@@ -195,10 +168,10 @@ export default function WorkforceList() {
       <div className="table-card">
         <div className="table-toolbar">
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <input 
-              type="text" 
-              className="search-input" 
-              placeholder="Search worker by name, NIC, site..." 
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search worker by name, NIC, site..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -319,20 +292,20 @@ export default function WorkforceList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Full Name *</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="text"
+                      className="form-input"
+                      required
                       value={workerForm.fullName}
                       onChange={(e) => setWorkerForm({ ...workerForm, fullName: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
                     <label className="form-label">NIC / Identity No *</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="text"
+                      className="form-input"
+                      required
                       value={workerForm.nic}
                       onChange={(e) => setWorkerForm({ ...workerForm, nic: e.target.value })}
                     />
@@ -342,8 +315,8 @@ export default function WorkforceList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Trade Skill Category *</label>
-                    <select 
-                      className="form-select" 
+                    <select
+                      className="form-select"
                       value={workerForm.tradeCategory}
                       onChange={(e) => setWorkerForm({ ...workerForm, tradeCategory: e.target.value })}
                     >
@@ -356,11 +329,11 @@ export default function WorkforceList() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Daily Wage Rate (LKR/day) *</label>
-                    <input 
-                      type="number" 
-                      step="0.50" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="number"
+                      step="0.50"
+                      className="form-input"
+                      required
                       value={workerForm.dailyWageRate}
                       onChange={(e) => setWorkerForm({ ...workerForm, dailyWageRate: Number(e.target.value) })}
                     />
@@ -370,19 +343,19 @@ export default function WorkforceList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Contact Phone</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
+                    <input
+                      type="text"
+                      className="form-input"
                       value={workerForm.phone}
                       onChange={(e) => setWorkerForm({ ...workerForm, phone: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Assigned Project Site *</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="text"
+                      className="form-input"
+                      required
                       value={workerForm.assignedSite}
                       onChange={(e) => setWorkerForm({ ...workerForm, assignedSite: e.target.value })}
                     />
@@ -413,8 +386,8 @@ export default function WorkforceList() {
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label">Select Worker *</label>
-                  <select 
-                    className="form-select" 
+                  <select
+                    className="form-select"
                     value={attendanceForm.workerId}
                     onChange={(e) => setAttendanceForm({ ...attendanceForm, workerId: Number(e.target.value) })}
                   >
@@ -427,18 +400,18 @@ export default function WorkforceList() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Attendance Date *</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
-                      required 
+                    <input
+                      type="date"
+                      className="form-input"
+                      required
                       value={attendanceForm.date}
                       onChange={(e) => setAttendanceForm({ ...attendanceForm, date: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Status *</label>
-                    <select 
-                      className="form-select" 
+                    <select
+                      className="form-select"
                       value={attendanceForm.status}
                       onChange={(e) => setAttendanceForm({ ...attendanceForm, status: e.target.value })}
                     >
@@ -450,10 +423,10 @@ export default function WorkforceList() {
 
                 <div className="form-group">
                   <label className="form-label">Target Site Name *</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    required 
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
                     value={attendanceForm.siteName}
                     onChange={(e) => setAttendanceForm({ ...attendanceForm, siteName: e.target.value })}
                   />

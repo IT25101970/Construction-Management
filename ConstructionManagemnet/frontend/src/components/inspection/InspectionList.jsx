@@ -4,9 +4,8 @@ import { projectApi } from '../../api/projectApi';
 import InspectionModal from './InspectionModal';
 import InspectionReportModal from './InspectionReportModal';
 import {
-  ClipboardCheck, Plus, Search, Filter, BarChart3, Edit, Trash2,
-  AlertTriangle, CheckCircle2, Clock, RefreshCw, ShieldAlert, ArrowUpRight,
-  ShieldCheck, FileText, CheckSquare
+  Plus, BarChart3, Edit, Trash2,
+  AlertTriangle, RefreshCw, ShieldAlert, ShieldCheck, CheckSquare
 } from 'lucide-react';
 
 export default function InspectionList() {

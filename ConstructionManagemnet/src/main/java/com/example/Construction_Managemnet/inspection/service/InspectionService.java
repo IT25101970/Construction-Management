@@ -74,9 +74,10 @@ public class InspectionService {
     }
 
     private void triggerAutomatedReInspection(Inspection failedInspection) {
+        if (inspectionRepository.existsByOriginalInspectionIdAndStatusAndIsDeletedFalse(failedInspection.getId(), InspectionStatus.PENDING)) return;
         LocalDate nextDate = failedInspection.getFollowUpDate() != null
                 ? failedInspection.getFollowUpDate()
-                : LocalDate.now().plusDays(5);
+                : (failedInspection.getInspectionDate().isAfter(LocalDate.now()) ? failedInspection.getInspectionDate() : LocalDate.now()).plusDays(5);
 
         Inspection reInspection = new Inspection();
         reInspection.setProject(failedInspection.getProject());
@@ -107,10 +108,21 @@ public class InspectionService {
         long pending = all.stream().filter(i -> i.getStatus() == InspectionStatus.PENDING).count();
         long reInspections = all.stream().filter(i -> Boolean.TRUE.equals(i.getIsReInspection())).count();
 
-        double passRate = total > 0 ? ((double) passed / (passed + failed > 0 ? (passed + failed) : 1)) * 100.0 : 100.0;
+        double passRate = passed + failed > 0 ? ((double) passed / (passed + failed)) * 100.0 : 0.0;
 
+        java.util.Set<Long> resolved = new java.util.HashSet<>();
+        Map<Long, Inspection> byId = new HashMap<>();
+        all.forEach(inspection -> byId.put(inspection.getId(), inspection));
+        for (Inspection inspection : all) {
+            if (inspection.getStatus() != InspectionStatus.PASSED) continue;
+            Long original = inspection.getOriginalInspectionId();
+            while (original != null && resolved.add(original)) {
+                Inspection parent = byId.get(original);
+                original = parent == null ? null : parent.getOriginalInspectionId();
+            }
+        }
         List<Inspection> openDefects = all.stream()
-                .filter(i -> i.getStatus() == InspectionStatus.FAILED)
+                .filter(i -> i.getStatus() == InspectionStatus.FAILED && !resolved.contains(i.getId()))
                 .toList();
 
         Map<String, Object> report = new HashMap<>();
@@ -127,6 +139,7 @@ public class InspectionService {
     }
 
     private void mapDtoToEntity(InspectionDto dto, Inspection inspection, Project project) {
+        if (dto.getFollowUpDate() != null && dto.getInspectionDate() != null && !dto.getFollowUpDate().isAfter(dto.getInspectionDate())) throw new IllegalArgumentException("Follow-up must be after the inspection date");
         inspection.setProject(project);
         inspection.setStage(dto.getStage());
         inspection.setInspectorName(dto.getInspectorName());
